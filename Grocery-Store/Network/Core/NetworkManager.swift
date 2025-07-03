@@ -10,25 +10,38 @@ final class NetworkManager: NetworkServiceProtocol {
     func request<T: Decodable>( _ endpoint: Endpoint, decodeTo type: T.Type ) async throws -> T {
         let urlRequest = try endpoint.asURLRequest()
 
-        if #available(iOS 15, macOS 12, *) {
-            let (data, resp) = try await URLSession.shared.data(for: urlRequest)
-            try Self.validate(resp)
-            return try Self.decode(data, as: type)
-        } else {
-            return try await withCheckedThrowingContinuation { cont in
-                URLSession.shared.dataTask(with: urlRequest) { data, resp, err in
-                    if let err { return cont.resume(throwing: err) }
-                    do {
-                        try Self.validate(resp)
-                        guard let data else { throw URLError(.badServerResponse) }
-                        let decoded = try Self.decode(data, as: type)
-                        cont.resume(returning: decoded)
-                    } catch {
-                        cont.resume(throwing: error)
-                    }
-                }.resume()
+        func perform() async throws -> (data: Data, response: URLResponse) {
+            if #available(iOS 15, *) {
+                return try await URLSession.shared.data(for: urlRequest)
+            } else {
+                return try await withCheckedThrowingContinuation { cont in
+                    URLSession.shared.dataTask(with: urlRequest) { data, resp, err in
+                        if let err {
+                            cont.resume(throwing: err)
+                            return
+                        }
+                        guard let data, let resp else {
+                            cont.resume(throwing: URLError(.badServerResponse))
+                            return
+                        }
+                        cont.resume(returning: (data, resp))
+                    }.resume()
+                }
             }
         }
+
+        var (data, resp) = try await perform()
+
+        if Self.isUnauthorized(resp) {
+            try await Self.refreshIfPossible()
+            (data, resp) = try await perform()
+        }
+
+        try Self.validate(resp)
+
+        return try Self.decode(data, as: type)
+
+
     }
 
     // MARK: helpers
@@ -43,5 +56,19 @@ final class NetworkManager: NetworkServiceProtocol {
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601          // Instant / LocalDateTime
         return try dec.decode(type, from: data)
+    }
+
+    private static func isUnauthorized(_ resp: URLResponse?) -> Bool {
+        guard let http = resp as? HTTPURLResponse else { return false }
+        return http.statusCode == 401 || http.statusCode == 403
+    }
+
+    private static func refreshIfPossible() async throws {
+        guard let refresh = TokenStorage.refreshToken else {
+            throw URLError(.userAuthenticationRequired)
+        }
+
+        let tokens = try await AuthService().refresh(using: refresh)
+        TokenStorage.save(tokens)
     }
 }

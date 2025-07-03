@@ -17,6 +17,11 @@ struct Endpoint {
         request.httpBody = body
         request.allHTTPHeaderFields = headers
         request.setValue("applications/json", forHTTPHeaderField: "Content-Type")
+
+        if let token = TokenStorage.accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
         return request
     }
 }
