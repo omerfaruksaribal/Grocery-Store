@@ -1,3 +1,5 @@
+import Foundation
+
 struct ProductModel: Codable {
     let id: String
     let name: String
@@ -8,6 +10,9 @@ struct ProductModel: Codable {
     let category: String
     let brand: String
     let weight: String
+    let averageRating: Double
     let reviews: [ReviewModel]?
-    let averageRating: Double?
+
+    let createdAt: Date
+    let lastModifiedAt: Date
 }

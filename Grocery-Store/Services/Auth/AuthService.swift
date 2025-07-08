@@ -23,7 +23,7 @@ private enum AuthEndpoint {
             return Endpoint(path: "/auth/refresh-token", method: .POST, body: body)
         case .activate(let payload):
             let body = try? JSONEncoder().encode(payload)
-            return Endpoint(path: "/auth/activate", method: .POST, body: body)
+            return Endpoint(path: "/auth/activate", method: .PATCH, body: body)
         case .forgotPassword(let payload):
             let body = try? JSONEncoder().encode(payload)
             return Endpoint(path: "/auth/forgot-password", method: .POST, body: body)
@@ -53,13 +53,13 @@ final class AuthService {
     }
 
     /// /auth/login → ApiResponse<LoginResponseData>
-    func login(_ req: LoginRequest) async throws -> ApiResponse<LoginResponseData> {
+    func login(_ req: LoginRequest) async throws -> ApiResponse<LoginTokens> {
 
         let endpoint = AuthEndpoint.login(req).value
 
         return try await network.request(
             endpoint,
-            decodeTo: ApiResponse<LoginResponseData>.self
+            decodeTo: ApiResponse<LoginTokens>.self
         )
     }
 
